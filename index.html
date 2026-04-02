@@ -114,7 +114,7 @@
       fissoFederica: 1000,
       fissoSimona: 500,
       fissoAsmaa: 500,
-      leadBonus: 10,
+      compensoPerApp: 10,
       teamBonusPercent: 50,
       rimborsoSIM: 10,
       soglie: [
@@ -129,7 +129,7 @@
     };
 
     const DEFAULT_DATA = {
-      federica: { appuntamenti: 0, lead: 0, sim: true, rinnovoAnnuale: 0, rinnovoQuad: 0 },
+      federica: { appuntamenti: 0, sim: true, rinnovoAnnuale: 0, rinnovoQuad: 0 },
       simona: { appuntamenti: 0, sim: true, rinnovoAnnuale: 0, rinnovoQuad: 0 },
       asmaa: { appuntamenti: 0, sim: true, rinnovoAnnuale: 0, rinnovoQuad: 0 },
       mese: new Date().toISOString().slice(0, 7),
@@ -161,25 +161,23 @@
       const app = person.appuntamenti;
       const isFederica = key === 'federica';
       const fisso = settings[`fisso${key.charAt(0).toUpperCase() + key.slice(1)}`];
+      const compensoApp = app * settings.compensoPerApp;
       const { bonus: bonusApp, raggiunte } = calcBonusAppuntamenti(app, settings.soglie);
 
       const voci = [
         { label: 'Fisso mensile', value: fisso },
-        { label: `Bonus appuntamenti (${app} presentati)`, value: bonusApp },
+        { label: `Appuntamenti (${app} × ${fmt(settings.compensoPerApp)})`, value: compensoApp },
+        { label: `Bonus soglie (${app} presentati)`, value: bonusApp },
       ];
 
-      let bonusLead = 0;
       if (isFederica) {
-        bonusLead = person.lead * settings.leadBonus;
-        voci.push({ label: `Bonus lead personali (${person.lead} × ${fmt(settings.leadBonus)})`, value: bonusLead });
-
         // Bonus team
-        const bonusSimona = calcBonusAppuntamenti(data.simona.appuntamenti, settings.soglie).bonus;
         const bonusAsmaa = calcBonusAppuntamenti(data.asmaa.appuntamenti, settings.soglie).bonus;
-        const teamSimona = Math.round(bonusSimona * settings.teamBonusPercent / 100);
+        const bonusSimona = calcBonusAppuntamenti(data.simona.appuntamenti, settings.soglie).bonus;
         const teamAsmaa = Math.round(bonusAsmaa * settings.teamBonusPercent / 100);
-        voci.push({ label: `Bonus team da Simona (${settings.teamBonusPercent}% di ${fmt(bonusSimona)})`, value: teamSimona });
+        const teamSimona = Math.round(bonusSimona * settings.teamBonusPercent / 100);
         voci.push({ label: `Bonus team da Asmaa (${settings.teamBonusPercent}% di ${fmt(bonusAsmaa)})`, value: teamAsmaa });
+        voci.push({ label: `Bonus team da Simona (${settings.teamBonusPercent}% di ${fmt(bonusSimona)})`, value: teamSimona });
       }
 
       if (person.sim) {
@@ -255,7 +253,6 @@
       const person = PEOPLE[personKey];
       const pData = data[personKey];
       const comp = calcCompenso(personKey, data, settings);
-      const isFederica = personKey === 'federica';
 
       const update = (field, value) => {
         setData(prev => ({ ...prev, [personKey]: { ...prev[personKey], [field]: value } }));
@@ -292,7 +289,7 @@
                     Appuntamenti presentati
                   </label>
                   <span className={`text-sm font-semibold text-${person.color}-600`}>
-                    {fmt(pData.appuntamenti * 10)}
+                    {fmt(pData.appuntamenti * settings.compensoPerApp)}
                   </span>
                 </div>
                 <div className="flex items-center gap-4">
@@ -321,39 +318,6 @@
                   />
                 </div>
               </div>
-
-              {/* Lead (solo Federica) */}
-              {isFederica && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-2">
-                    Lead personali
-                  </label>
-                  <div className="flex items-center gap-4">
-                    <div className="flex-1 relative py-2">
-                      <input
-                        type="range"
-                        min="0"
-                        max="100"
-                        value={pData.lead}
-                        onChange={e => update('lead', parseInt(e.target.value))}
-                        className="w-full slider-blue"
-                      />
-                      <div className="flex justify-between text-xs text-gray-400 mt-1 px-0.5">
-                        <span>0</span>
-                        <span>50</span>
-                        <span>100</span>
-                      </div>
-                    </div>
-                    <input
-                      type="number"
-                      min="0"
-                      value={pData.lead}
-                      onChange={e => update('lead', Math.max(0, parseInt(e.target.value) || 0))}
-                      className="w-20 text-center text-lg font-bold border-2 border-federica-300 rounded-xl p-2 focus:outline-none focus:ring-2 focus:ring-federica-400"
-                    />
-                  </div>
-                </div>
-              )}
 
               {/* SIM toggle */}
               <Toggle
@@ -578,12 +542,12 @@
             <h3 className="text-lg font-bold text-gray-800 mb-4">Parametri generali</h3>
             <div className="grid sm:grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1">Bonus per lead (€)</label>
+                <label className="block text-sm font-medium text-gray-600 mb-1">€ per appuntamento</label>
                 <input
                   type="number"
                   min="0"
-                  value={settings.leadBonus}
-                  onChange={e => update('leadBonus', Math.max(0, parseFloat(e.target.value) || 0))}
+                  value={settings.compensoPerApp}
+                  onChange={e => update('compensoPerApp', Math.max(0, parseFloat(e.target.value) || 0))}
                   className="w-full border-2 border-gray-300 rounded-xl p-3 text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-gray-400"
                 />
               </div>
@@ -695,6 +659,20 @@
       const mesiLong = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
       const [anno, meseNum] = data.mese.split('-');
       const meseIdx = parseInt(meseNum) - 1;
+      const [open, setOpen] = useState(false);
+      const [pickerAnno, setPickerAnno] = useState(parseInt(anno));
+      const pickerRef = React.useRef(null);
+
+      // Close picker on outside click
+      useEffect(() => {
+        if (!open) return;
+        const handler = (e) => {
+          if (pickerRef.current && !pickerRef.current.contains(e.target)) setOpen(false);
+        };
+        document.addEventListener('mousedown', handler);
+        document.addEventListener('touchstart', handler);
+        return () => { document.removeEventListener('mousedown', handler); document.removeEventListener('touchstart', handler); };
+      }, [open]);
 
       const changeMonth = (delta) => {
         let newIdx = meseIdx + delta;
@@ -704,29 +682,89 @@
         setData(prev => ({ ...prev, mese: `${newAnno}-${String(newIdx + 1).padStart(2, '0')}` }));
       };
 
+      const selectMonth = (mIdx) => {
+        setData(prev => ({ ...prev, mese: `${pickerAnno}-${String(mIdx + 1).padStart(2, '0')}` }));
+        setOpen(false);
+      };
+
+      const toggleOpen = () => {
+        setPickerAnno(parseInt(anno));
+        setOpen(prev => !prev);
+      };
+
       return (
-        <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
-          <button
-            onClick={() => changeMonth(-1)}
-            className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-white hover:shadow transition-all text-gray-600"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <div className="px-3 py-1.5 text-sm font-semibold text-gray-800 min-w-[100px] text-center select-none">
-            <span className="hidden sm:inline">{mesiLong[meseIdx]}</span>
-            <span className="sm:hidden">{mesi[meseIdx]}</span>
-            {' '}{anno}
+        <div className="relative" ref={pickerRef}>
+          <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
+            <button
+              onClick={() => changeMonth(-1)}
+              className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-white hover:shadow transition-all text-gray-600"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <button
+              onClick={toggleOpen}
+              className="px-3 py-1.5 text-sm font-semibold text-gray-800 min-w-[100px] text-center select-none rounded-lg hover:bg-white hover:shadow transition-all"
+            >
+              <span className="hidden sm:inline">{mesiLong[meseIdx]}</span>
+              <span className="sm:hidden">{mesi[meseIdx]}</span>
+              {' '}{anno}
+            </button>
+            <button
+              onClick={() => changeMonth(1)}
+              className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-white hover:shadow transition-all text-gray-600"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
           </div>
-          <button
-            onClick={() => changeMonth(1)}
-            className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-white hover:shadow transition-all text-gray-600"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
+
+          {/* Dropdown month/year picker */}
+          {open && (
+            <div className="absolute right-0 top-full mt-2 bg-white rounded-2xl shadow-xl border border-gray-200 p-4 z-[100] w-[280px] fade-in">
+              {/* Year navigation */}
+              <div className="flex items-center justify-between mb-3">
+                <button
+                  onClick={() => setPickerAnno(prev => prev - 1)}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-600 transition-colors"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+                <span className="text-base font-bold text-gray-800">{pickerAnno}</span>
+                <button
+                  onClick={() => setPickerAnno(prev => prev + 1)}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-600 transition-colors"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </div>
+              {/* Month grid */}
+              <div className="grid grid-cols-3 gap-1.5">
+                {mesi.map((m, i) => {
+                  const isSelected = i === meseIdx && pickerAnno === parseInt(anno);
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => selectMonth(i)}
+                      className={`py-2 px-1 rounded-xl text-sm font-medium transition-all ${
+                        isSelected
+                          ? 'bg-blue-600 text-white shadow-md'
+                          : 'text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      {m}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       );
     }
