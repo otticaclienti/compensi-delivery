@@ -213,7 +213,7 @@
             <div className={`w-12 h-6 rounded-full transition-colors duration-200 ${checked ? `bg-${color}-500` : 'bg-gray-300'}`}></div>
             <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${checked ? 'translate-x-6' : ''}`}></div>
           </div>
-          <span className="text-sm text-gray-700 font-medium">{label}</span>
+          <span className="text-sm text-gray-700 font-bold">{label}</span>
         </label>
       );
     }
@@ -284,10 +284,10 @@
               {/* Appuntamenti */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-medium text-gray-600">
+                  <label className="block text-sm font-bold text-gray-600">
                     Appuntamenti presentati
                   </label>
-                  <span className={`text-sm font-semibold text-${person.color}-600`}>
+                  <span className={`text-sm font-bold text-${person.color}-600`}>
                     {fmt(pData.appuntamenti * settings.compensoPerApp)}
                   </span>
                 </div>
@@ -376,8 +376,8 @@
               <div className="space-y-2 mt-4">
                 {comp.voci.map((v, i) => (
                   <div key={i} className={`flex justify-between items-center py-2 px-3 rounded-lg ${v.value > 0 ? 'bg-gray-50' : ''}`}>
-                    <span className="text-sm text-gray-600">{v.label}</span>
-                    <span className={`font-semibold ${v.value > 0 ? `text-${person.color}-700` : 'text-gray-400'}`}>
+                    <span className="text-sm font-medium text-gray-600">{v.label}</span>
+                    <span className={`font-bold ${v.value > 0 ? `text-${person.color}-700` : 'text-gray-400'}`}>
                       {v.value > 0 ? '+' : ''}{fmt(v.value)}
                     </span>
                   </div>
@@ -437,7 +437,7 @@
                   <div key={key} className="flex items-center gap-4">
                     <div className="w-20 sm:w-24 flex items-center gap-2 shrink-0">
                       <Avatar person={person} size="sm" />
-                      <span className="text-xs sm:text-sm font-semibold text-gray-700">{person.nome}</span>
+                      <span className="text-xs sm:text-sm font-bold text-gray-700">{person.nome}</span>
                     </div>
                     <div className="flex-1 bg-gray-100 rounded-full h-8 overflow-hidden">
                       <div
@@ -469,8 +469,8 @@
                   <div className="space-y-1.5">
                     {comp.voci.map((v, i) => (
                       <div key={i} className="flex justify-between text-sm">
-                        <span className="text-gray-500 truncate mr-2">{v.label.split('(')[0].trim()}</span>
-                        <span className={`font-medium ${v.value > 0 ? `text-${person.color}-600` : 'text-gray-400'} shrink-0`}>
+                        <span className="text-gray-500 font-medium truncate mr-2">{v.label.split('(')[0].trim()}</span>
+                        <span className={`font-bold ${v.value > 0 ? `text-${person.color}-600` : 'text-gray-400'} shrink-0`}>
                           {fmt(v.value)}
                         </span>
                       </div>
@@ -924,7 +924,7 @@
                   <span className={`w-7 h-7 rounded-full ${tab === t.id ? 'bg-white/30' : 'bg-white/10'} text-white text-xs flex items-center justify-center font-bold transition-colors`}>
                     {t.icon}
                   </span>
-                  <span className="text-[10px] font-medium">{t.label === 'Impostazioni' ? 'Impost.' : t.label}</span>
+                  <span className="text-[10px] font-bold">{t.label === 'Impostazioni' ? 'Impost.' : t.label}</span>
                 </button>
               ))}
             </div>
