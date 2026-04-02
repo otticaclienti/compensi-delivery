@@ -112,8 +112,8 @@
     // ─── Defaults ───
     const DEFAULT_SETTINGS = {
       fissoFederica: 1000,
-      fissoSimona: 250,
-      fissoAsmaa: 250,
+      fissoSimona: 500,
+      fissoAsmaa: 500,
       leadBonus: 10,
       teamBonusPercent: 50,
       rimborsoSIM: 10,
@@ -429,8 +429,8 @@
     function TeamSummary({ data, settings }) {
       const comps = {
         federica: calcCompenso('federica', data, settings),
-        simona: calcCompenso('simona', data, settings),
         asmaa: calcCompenso('asmaa', data, settings),
+        simona: calcCompenso('simona', data, settings),
       };
       const costoTotale = comps.federica.totale + comps.simona.totale + comps.asmaa.totale;
       const maxTotale = Math.max(comps.federica.totale, comps.simona.totale, comps.asmaa.totale, 1);
@@ -553,8 +553,8 @@
             <div className="grid sm:grid-cols-3 gap-4">
               {[
                 { key: 'fissoFederica', label: 'Federica', color: 'federica' },
-                { key: 'fissoSimona', label: 'Simona', color: 'simona' },
                 { key: 'fissoAsmaa', label: 'Asmaa', color: 'asmaa' },
+                { key: 'fissoSimona', label: 'Simona', color: 'simona' },
               ].map(item => (
                 <div key={item.key}>
                   <label className="block text-sm font-medium text-gray-600 mb-1">{item.label}</label>
@@ -757,8 +757,8 @@
 
       const tabs = [
         { id: 'federica', label: 'Federica', color: 'federica', icon: 'F' },
-        { id: 'simona', label: 'Simona', color: 'simona', icon: 'S' },
         { id: 'asmaa', label: 'Asmaa', color: 'asmaa', icon: 'A' },
+        { id: 'simona', label: 'Simona', color: 'simona', icon: 'S' },
         { id: 'riepilogo', label: 'Riepilogo', color: 'gray', icon: '=' },
         { id: 'impostazioni', label: 'Impostazioni', color: 'purple', icon: '*' },
       ];
@@ -837,8 +837,8 @@
           {/* Content */}
           <main className="max-w-5xl mx-auto px-4 py-6">
             {tab === 'federica' && <PersonCard personKey="federica" data={data} setData={setData} settings={settings} />}
-            {tab === 'simona' && <PersonCard personKey="simona" data={data} setData={setData} settings={settings} />}
             {tab === 'asmaa' && <PersonCard personKey="asmaa" data={data} setData={setData} settings={settings} />}
+            {tab === 'simona' && <PersonCard personKey="simona" data={data} setData={setData} settings={settings} />}
             {tab === 'riepilogo' && <TeamSummary data={data} settings={settings} />}
             {tab === 'impostazioni' && <SettingsPanel settings={settings} setSettings={setSettings} />}
           </main>
