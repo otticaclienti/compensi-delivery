@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Compensi Segreteria — Calcolatore Mensile</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+    @media print {
+      .no-print { display: none !important; }
+      .print-break { page-break-before: always; }
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+    .tab-active { position: relative; }
+    .tab-active::after {
+      content: '';
+      position: absolute;
+      bottom: -2px;
+      left: 0;
+      right: 0;
+      height: 3px;
+      border-radius: 3px 3px 0 0;
+    }
+    .fade-in { animation: fadeIn 0.3s ease-in-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    input[type="range"]::-webkit-slider-thumb { cursor: grab; }
+    input[type="range"]:active::-webkit-slider-thumb { cursor: grabbing; }
+  </style>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            federica: { 50: '#eff6ff', 100: '#dbeafe', 200: '#bfdbfe', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8', 800: '#1e40af' },
+            simona: { 50: '#f0fdf4', 100: '#dcfce7', 200: '#bbf7d0', 500: '#22c55e', 600: '#16a34a', 700: '#15803d', 800: '#166534' },
+            asmaa: { 50: '#fffbeb', 100: '#fef3c7', 200: '#fde68a', 500: '#f59e0b', 600: '#d97706', 700: '#b45309', 800: '#92400e' },
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useCallback, useMemo } = React;
+
+    // ─── Defaults ───
+    const DEFAULT_SETTINGS = {
+      fissoFederica: 1000,
+      fissoSimona: 250,
+      fissoAsmaa: 250,
+      leadBonus: 10,
+      teamBonusPercent: 50,
+      rimborsoSIM: 10,
+      soglie: [
+        { min: 50, bonus: 100 },
+        { min: 60, bonus: 100 },
+        { min: 80, bonus: 200 },
+        { min: 100, bonus: 400 },
+      ],
+      rinnoviAttivi: false,
+      rinnovoAnnualePerc: 2,
+      rinnovoQuadPerc: 3,
+    };
+
+    const DEFAULT_DATA = {
+      federica: { appuntamenti: 0, lead: 0, sim: true, rinnovoAnnuale: 0, rinnovoQuad: 0 },
+      simona: { appuntamenti: 0, sim: true, rinnovoAnnuale: 0, rinnovoQuad: 0 },
+      asmaa: { appuntamenti: 0, sim: true, rinnovoAnnuale: 0, rinnovoQuad: 0 },
+      mese: new Date().toISOString().slice(0, 7),
+    };
+
+    const PEOPLE = {
+      federica: { nome: 'Federica', ruolo: 'Direttrice di segreteria', color: 'federica', initials: 'F' },
+      simona: { nome: 'Simona', ruolo: 'Segretaria', color: 'simona', initials: 'S' },
+      asmaa: { nome: 'Asmaa', ruolo: 'Segretaria', color: 'asmaa', initials: 'A' },
+    };
+
+    // ─── Helpers ───
+    const fmt = (n) => n.toLocaleString('it-IT', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' €';
+
+    function calcBonusAppuntamenti(appuntamenti, soglie) {
+      let bonus = 0;
+      const raggiunte = [];
+      for (const s of soglie) {
+        if (appuntamenti >= s.min) {
+          bonus += s.bonus;
+          raggiunte.push(s);
+        }
+      }
+      return { bonus, raggiunte };
+    }
+
+    function calcCompenso(key, data, settings) {
+      const person = data[key];
+      const app = person.appuntamenti;
+      const isFederica = key === 'federica';
+      const fisso = settings[`fisso${key.charAt(0).toUpperCase() + key.slice(1)}`];
+      const { bonus: bonusApp, raggiunte } = calcBonusAppuntamenti(app, settings.soglie);
+
+      const voci = [
+        { label: 'Fisso mensile', value: fisso },
+        { label: `Bonus appuntamenti (${app} presentati)`, value: bonusApp },
+      ];
+
+      let bonusLead = 0;
+      if (isFederica) {
+        bonusLead = person.lead * settings.leadBonus;
+        voci.push({ label: `Bonus lead personali (${person.lead} × ${fmt(settings.leadBonus)})`, value: bonusLead });
+
+        // Bonus team
+        const bonusSimona = calcBonusAppuntamenti(data.simona.appuntamenti, settings.soglie).bonus;
+        const bonusAsmaa = calcBonusAppuntamenti(data.asmaa.appuntamenti, settings.soglie).bonus;
+        const teamSimona = Math.round(bonusSimona * settings.teamBonusPercent / 100);
+        const teamAsmaa = Math.round(bonusAsmaa * settings.teamBonusPercent / 100);
+        voci.push({ label: `Bonus team da Simona (${settings.teamBonusPercent}% di ${fmt(bonusSimona)})`, value: teamSimona });
+        voci.push({ label: `Bonus team da Asmaa (${settings.teamBonusPercent}% di ${fmt(bonusAsmaa)})`, value: teamAsmaa });
+      }
+
+      if (person.sim) {
+        voci.push({ label: 'Rimborso SIM', value: settings.rimborsoSIM });
+      }
+
+      // Rinnovi (placeholder)
+      if (settings.rinnoviAttivi) {
+        const rinnAnn = person.rinnovoAnnuale * settings.rinnovoAnnualePerc / 100;
+        const rinnQuad = person.rinnovoQuad * settings.rinnovoQuadPerc / 100;
+        if (rinnAnn > 0) voci.push({ label: `Rinnovo annuale (${settings.rinnovoAnnualePerc}% di ${fmt(person.rinnovoAnnuale)})`, value: rinnAnn });
+        if (rinnQuad > 0) voci.push({ label: `Rinnovo quadrimestrale (${settings.rinnovoQuadPerc}% di ${fmt(person.rinnovoQuad)})`, value: rinnQuad });
+      }
+
+      const totale = voci.reduce((s, v) => s + v.value, 0);
+      return { voci, totale, raggiunte, bonusApp };
+    }
+
+    // ─── Components ───
+
+    function Avatar({ person, size = 'md' }) {
+      const sizes = { sm: 'w-8 h-8 text-sm', md: 'w-12 h-12 text-lg', lg: 'w-16 h-16 text-2xl' };
+      return (
+        <div className={`${sizes[size]} rounded-full bg-${person.color}-500 text-white font-bold flex items-center justify-center shadow-lg`}>
+          {person.initials}
+        </div>
+      );
+    }
+
+    function Toggle({ checked, onChange, label, color = 'blue' }) {
+      return (
+        <label className="flex items-center gap-3 cursor-pointer select-none">
+          <div className="relative" onClick={() => onChange(!checked)}>
+            <div className={`w-12 h-6 rounded-full transition-colors duration-200 ${checked ? `bg-${color}-500` : 'bg-gray-300'}`}></div>
+            <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${checked ? 'translate-x-6' : ''}`}></div>
+          </div>
+          <span className="text-sm text-gray-700 font-medium">{label}</span>
+        </label>
+      );
+    }
+
+    function BonusMeter({ appuntamenti, soglie, color }) {
+      return (
+        <div className="space-y-2">
+          <h4 className="text-sm font-semibold text-gray-600 uppercase tracking-wide">Fasce bonus raggiunte</h4>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {soglie.map((s, i) => {
+              const reached = appuntamenti >= s.min;
+              return (
+                <div
+                  key={i}
+                  className={`rounded-xl p-3 text-center transition-all duration-300 border-2 ${
+                    reached
+                      ? `bg-${color}-50 border-${color}-400 shadow-md scale-105`
+                      : 'bg-gray-50 border-gray-200 opacity-60'
+                  }`}
+                >
+                  <div className={`text-xs font-medium ${reached ? `text-${color}-600` : 'text-gray-400'}`}>
+                    {reached ? '✓' : ''} ≥ {s.min} app.
+                  </div>
+                  <div className={`text-lg font-bold ${reached ? `text-${color}-700` : 'text-gray-400'}`}>
+                    +{fmt(s.bonus)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    function PersonCard({ personKey, data, setData, settings }) {
+      const person = PEOPLE[personKey];
+      const pData = data[personKey];
+      const comp = calcCompenso(personKey, data, settings);
+      const isFederica = personKey === 'federica';
+
+      const update = (field, value) => {
+        setData(prev => ({ ...prev, [personKey]: { ...prev[personKey], [field]: value } }));
+      };
+
+      return (
+        <div className="fade-in space-y-6">
+          {/* Header */}
+          <div className={`bg-gradient-to-r from-${person.color}-500 to-${person.color}-600 rounded-2xl p-6 text-white shadow-xl`}>
+            <div className="flex items-center gap-4">
+              <div className={`w-16 h-16 rounded-full bg-white/20 backdrop-blur flex items-center justify-center text-2xl font-bold`}>
+                {person.initials}
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold">{person.nome}</h2>
+                <p className="text-white/80">{person.ruolo}</p>
+              </div>
+              <div className="ml-auto text-right">
+                <p className="text-white/70 text-sm">Totale mensile</p>
+                <p className="text-3xl font-extrabold">{fmt(comp.totale)}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-6">
+            {/* Input Section */}
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 space-y-6">
+              <h3 className="text-lg font-bold text-gray-800">Dati del mese</h3>
+
+              {/* Appuntamenti */}
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-2">
+                  Appuntamenti presentati
+                </label>
+                <div className="flex items-center gap-4">
+                  <input
+                    type="range"
+                    min="0"
+                    max="150"
+                    value={pData.appuntamenti}
+                    onChange={e => update('appuntamenti', parseInt(e.target.value))}
+                    className={`flex-1 h-2 rounded-full appearance-none cursor-pointer accent-${person.color}-500`}
+                    style={{ accentColor: person.color === 'federica' ? '#3b82f6' : person.color === 'simona' ? '#22c55e' : '#f59e0b' }}
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    value={pData.appuntamenti}
+                    onChange={e => update('appuntamenti', Math.max(0, parseInt(e.target.value) || 0))}
+                    className={`w-20 text-center text-lg font-bold border-2 border-${person.color}-300 rounded-xl p-2 focus:outline-none focus:ring-2 focus:ring-${person.color}-400`}
+                  />
+                </div>
+              </div>
+
+              {/* Lead (solo Federica) */}
+              {isFederica && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-600 mb-2">
+                    Lead personali
+                  </label>
+                  <div className="flex items-center gap-4">
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={pData.lead}
+                      onChange={e => update('lead', parseInt(e.target.value))}
+                      className="flex-1 h-2 rounded-full appearance-none cursor-pointer"
+                      style={{ accentColor: '#3b82f6' }}
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      value={pData.lead}
+                      onChange={e => update('lead', Math.max(0, parseInt(e.target.value) || 0))}
+                      className="w-20 text-center text-lg font-bold border-2 border-federica-300 rounded-xl p-2 focus:outline-none focus:ring-2 focus:ring-federica-400"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* SIM toggle */}
+              <Toggle
+                checked={pData.sim}
+                onChange={v => update('sim', v)}
+                label="SIM aziendale attiva"
+                color={person.color}
+              />
+
+              {/* Rinnovi placeholder */}
+              <div className={`rounded-xl p-4 ${settings.rinnoviAttivi ? 'bg-gray-50' : 'bg-gray-50 opacity-60'}`}>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-sm font-semibold text-gray-600">
+                    {settings.rinnoviAttivi ? 'Bonus rinnovi' : 'Bonus rinnovi — prossimamente'}
+                  </span>
+                  {!settings.rinnoviAttivi && (
+                    <span className="text-xs bg-gray-200 text-gray-500 px-2 py-0.5 rounded-full">Disabilitato</span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Rinnovo annuale (€)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={pData.rinnovoAnnuale}
+                      onChange={e => update('rinnovoAnnuale', Math.max(0, parseFloat(e.target.value) || 0))}
+                      disabled={!settings.rinnoviAttivi}
+                      className="w-full border rounded-lg p-2 text-sm disabled:bg-gray-100 disabled:text-gray-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Rinnovo quadrimestrale (€)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={pData.rinnovoQuad}
+                      onChange={e => update('rinnovoQuad', Math.max(0, parseFloat(e.target.value) || 0))}
+                      disabled={!settings.rinnoviAttivi}
+                      className="w-full border rounded-lg p-2 text-sm disabled:bg-gray-100 disabled:text-gray-400"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Breakdown Section */}
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 space-y-6">
+              <h3 className="text-lg font-bold text-gray-800">Dettaglio compenso</h3>
+
+              <BonusMeter appuntamenti={pData.appuntamenti} soglie={settings.soglie} color={person.color} />
+
+              <div className="space-y-2 mt-4">
+                {comp.voci.map((v, i) => (
+                  <div key={i} className={`flex justify-between items-center py-2 px-3 rounded-lg ${v.value > 0 ? 'bg-gray-50' : ''}`}>
+                    <span className="text-sm text-gray-600">{v.label}</span>
+                    <span className={`font-semibold ${v.value > 0 ? `text-${person.color}-700` : 'text-gray-400'}`}>
+                      {v.value > 0 ? '+' : ''}{fmt(v.value)}
+                    </span>
+                  </div>
+                ))}
+                <div className={`flex justify-between items-center py-3 px-3 rounded-xl bg-${person.color}-50 border-2 border-${person.color}-200 mt-3`}>
+                  <span className="text-base font-bold text-gray-800">Totale</span>
+                  <span className={`text-xl font-extrabold text-${person.color}-700`}>{fmt(comp.totale)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function TeamSummary({ data, settings }) {
+      const comps = {
+        federica: calcCompenso('federica', data, settings),
+        simona: calcCompenso('simona', data, settings),
+        asmaa: calcCompenso('asmaa', data, settings),
+      };
+      const costoTotale = comps.federica.totale + comps.simona.totale + comps.asmaa.totale;
+      const maxTotale = Math.max(comps.federica.totale, comps.simona.totale, comps.asmaa.totale, 1);
+
+      const mesi = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+      const [anno, meseNum] = data.mese.split('-');
+      const meseLabel = `${mesi[parseInt(meseNum) - 1]} ${anno}`;
+
+      return (
+        <div className="fade-in space-y-6">
+          <div className="bg-gradient-to-r from-gray-800 to-gray-900 rounded-2xl p-6 text-white shadow-xl">
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div>
+                <h2 className="text-2xl font-bold">Riepilogo Team</h2>
+                <p className="text-gray-400">{meseLabel}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-gray-400 text-sm">Costo totale team</p>
+                <p className="text-3xl font-extrabold">{fmt(costoTotale)}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Bar Chart */}
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+            <h3 className="text-lg font-bold text-gray-800 mb-6">Confronto compensi</h3>
+            <div className="space-y-4">
+              {Object.entries(comps).map(([key, comp]) => {
+                const person = PEOPLE[key];
+                const pct = (comp.totale / maxTotale) * 100;
+                const colors = {
+                  federica: { bg: 'bg-federica-500', text: 'text-federica-700' },
+                  simona: { bg: 'bg-simona-500', text: 'text-simona-700' },
+                  asmaa: { bg: 'bg-asmaa-500', text: 'text-asmaa-700' },
+                };
+                return (
+                  <div key={key} className="flex items-center gap-4">
+                    <div className="w-24 flex items-center gap-2 shrink-0">
+                      <Avatar person={person} size="sm" />
+                      <span className="text-sm font-semibold text-gray-700">{person.nome}</span>
+                    </div>
+                    <div className="flex-1 bg-gray-100 rounded-full h-8 overflow-hidden">
+                      <div
+                        className={`h-full ${colors[key].bg} rounded-full transition-all duration-700 ease-out flex items-center justify-end pr-3`}
+                        style={{ width: `${Math.max(pct, 5)}%` }}
+                      >
+                        <span className="text-white text-sm font-bold whitespace-nowrap">{fmt(comp.totale)}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Detail Cards */}
+          <div className="grid md:grid-cols-3 gap-4">
+            {Object.entries(comps).map(([key, comp]) => {
+              const person = PEOPLE[key];
+              return (
+                <div key={key} className={`bg-white rounded-2xl p-5 shadow-sm border-2 border-${person.color}-200`}>
+                  <div className="flex items-center gap-3 mb-4">
+                    <Avatar person={person} size="sm" />
+                    <div>
+                      <p className="font-bold text-gray-800">{person.nome}</p>
+                      <p className="text-xs text-gray-500">{person.ruolo}</p>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    {comp.voci.map((v, i) => (
+                      <div key={i} className="flex justify-between text-sm">
+                        <span className="text-gray-500 truncate mr-2">{v.label.split('(')[0].trim()}</span>
+                        <span className={`font-medium ${v.value > 0 ? `text-${person.color}-600` : 'text-gray-400'} shrink-0`}>
+                          {fmt(v.value)}
+                        </span>
+                      </div>
+                    ))}
+                    <div className={`flex justify-between pt-2 mt-2 border-t-2 border-${person.color}-200`}>
+                      <span className="font-bold text-gray-800">Totale</span>
+                      <span className={`font-extrabold text-${person.color}-700`}>{fmt(comp.totale)}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    function SettingsPanel({ settings, setSettings }) {
+      const update = (field, value) => {
+        setSettings(prev => ({ ...prev, [field]: value }));
+      };
+
+      const updateSoglia = (index, field, value) => {
+        setSettings(prev => {
+          const soglie = [...prev.soglie];
+          soglie[index] = { ...soglie[index], [field]: value };
+          return { ...prev, soglie };
+        });
+      };
+
+      const resetDefaults = () => {
+        if (confirm('Ripristinare tutte le impostazioni ai valori predefiniti?')) {
+          setSettings(DEFAULT_SETTINGS);
+        }
+      };
+
+      return (
+        <div className="fade-in space-y-6">
+          <div className="bg-gradient-to-r from-purple-600 to-indigo-600 rounded-2xl p-6 text-white shadow-xl">
+            <h2 className="text-2xl font-bold">Impostazioni</h2>
+            <p className="text-white/70">Configura i parametri di calcolo</p>
+          </div>
+
+          {/* Fissi mensili */}
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+            <h3 className="text-lg font-bold text-gray-800 mb-4">Compensi fissi mensili</h3>
+            <div className="grid sm:grid-cols-3 gap-4">
+              {[
+                { key: 'fissoFederica', label: 'Federica', color: 'federica' },
+                { key: 'fissoSimona', label: 'Simona', color: 'simona' },
+                { key: 'fissoAsmaa', label: 'Asmaa', color: 'asmaa' },
+              ].map(item => (
+                <div key={item.key}>
+                  <label className="block text-sm font-medium text-gray-600 mb-1">{item.label}</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min="0"
+                      value={settings[item.key]}
+                      onChange={e => update(item.key, Math.max(0, parseFloat(e.target.value) || 0))}
+                      className={`w-full border-2 border-${item.color}-300 rounded-xl p-3 pr-8 text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-${item.color}-400`}
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">€</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Parametri generali */}
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+            <h3 className="text-lg font-bold text-gray-800 mb-4">Parametri generali</h3>
+            <div className="grid sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">Bonus per lead (€)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={settings.leadBonus}
+                  onChange={e => update('leadBonus', Math.max(0, parseFloat(e.target.value) || 0))}
+                  className="w-full border-2 border-gray-300 rounded-xl p-3 text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-gray-400"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">Bonus team (%)</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={settings.teamBonusPercent}
+                  onChange={e => update('teamBonusPercent', Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)))}
+                  className="w-full border-2 border-gray-300 rounded-xl p-3 text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-gray-400"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">Rimborso SIM (€)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={settings.rimborsoSIM}
+                  onChange={e => update('rimborsoSIM', Math.max(0, parseFloat(e.target.value) || 0))}
+                  className="w-full border-2 border-gray-300 rounded-xl p-3 text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-gray-400"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Soglie bonus */}
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+            <h3 className="text-lg font-bold text-gray-800 mb-4">Soglie bonus appuntamenti</h3>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-4 text-xs font-semibold text-gray-500 uppercase tracking-wide px-1">
+                <span>Appuntamenti minimi</span>
+                <span>Bonus fascia (€)</span>
+              </div>
+              {settings.soglie.map((s, i) => (
+                <div key={i} className="grid grid-cols-2 gap-4">
+                  <input
+                    type="number"
+                    min="0"
+                    value={s.min}
+                    onChange={e => updateSoglia(i, 'min', Math.max(0, parseInt(e.target.value) || 0))}
+                    className="border-2 border-gray-300 rounded-xl p-3 text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-gray-400"
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    value={s.bonus}
+                    onChange={e => updateSoglia(i, 'bonus', Math.max(0, parseFloat(e.target.value) || 0))}
+                    className="border-2 border-gray-300 rounded-xl p-3 text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-gray-400"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Rinnovi */}
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-800">Bonus rinnovi</h3>
+              <Toggle
+                checked={settings.rinnoviAttivi}
+                onChange={v => update('rinnoviAttivi', v)}
+                label={settings.rinnoviAttivi ? 'Attivo' : 'Disattivato'}
+                color="purple"
+              />
+            </div>
+            <div className={`grid sm:grid-cols-2 gap-4 ${!settings.rinnoviAttivi ? 'opacity-50 pointer-events-none' : ''}`}>
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">% Rinnovo annuale</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.5"
+                  value={settings.rinnovoAnnualePerc}
+                  onChange={e => update('rinnovoAnnualePerc', Math.max(0, parseFloat(e.target.value) || 0))}
+                  className="w-full border-2 border-gray-300 rounded-xl p-3 text-lg font-semibold"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">% Rinnovo quadrimestrale</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.5"
+                  value={settings.rinnovoQuadPerc}
+                  onChange={e => update('rinnovoQuadPerc', Math.max(0, parseFloat(e.target.value) || 0))}
+                  className="w-full border-2 border-gray-300 rounded-xl p-3 text-lg font-semibold"
+                />
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={resetDefaults}
+            className="text-sm text-gray-500 hover:text-red-500 transition-colors underline"
+          >
+            Ripristina valori predefiniti
+          </button>
+        </div>
+      );
+    }
+
+    // ─── Main App ───
+    function App() {
+      const [tab, setTab] = useState('federica');
+      const [data, setData] = useState(() => {
+        try {
+          const saved = localStorage.getItem('compensi-data');
+          return saved ? { ...DEFAULT_DATA, ...JSON.parse(saved) } : DEFAULT_DATA;
+        } catch { return DEFAULT_DATA; }
+      });
+      const [settings, setSettings] = useState(() => {
+        try {
+          const saved = localStorage.getItem('compensi-settings');
+          return saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : DEFAULT_SETTINGS;
+        } catch { return DEFAULT_SETTINGS; }
+      });
+
+      useEffect(() => {
+        localStorage.setItem('compensi-data', JSON.stringify(data));
+      }, [data]);
+
+      useEffect(() => {
+        localStorage.setItem('compensi-settings', JSON.stringify(settings));
+      }, [settings]);
+
+      const tabs = [
+        { id: 'federica', label: 'Federica', color: 'federica', icon: 'F' },
+        { id: 'simona', label: 'Simona', color: 'simona', icon: 'S' },
+        { id: 'asmaa', label: 'Asmaa', color: 'asmaa', icon: 'A' },
+        { id: 'riepilogo', label: 'Riepilogo', color: 'gray', icon: '=' },
+        { id: 'impostazioni', label: 'Impostazioni', color: 'purple', icon: '*' },
+      ];
+
+      const iconColors = {
+        federica: 'bg-federica-500',
+        simona: 'bg-simona-500',
+        asmaa: 'bg-asmaa-500',
+        gray: 'bg-gray-700',
+        purple: 'bg-purple-600',
+      };
+
+      return (
+        <div className="min-h-screen bg-gray-50">
+          {/* Top bar */}
+          <header className="bg-white border-b border-gray-200 sticky top-0 z-50 no-print">
+            <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center text-white font-bold shadow">
+                  C
+                </div>
+                <div>
+                  <h1 className="text-lg font-bold text-gray-900 leading-tight">Compensi Segreteria</h1>
+                  <p className="text-xs text-gray-500">Calcolatore mensile</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <input
+                  type="month"
+                  value={data.mese}
+                  onChange={e => setData(prev => ({ ...prev, mese: e.target.value }))}
+                  className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-400"
+                />
+                <button
+                  onClick={() => window.print()}
+                  className="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 shadow"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                  </svg>
+                  Stampa
+                </button>
+              </div>
+            </div>
+          </header>
+
+          {/* Tab nav */}
+          <nav className="bg-white border-b border-gray-100 sticky top-[65px] z-40 no-print">
+            <div className="max-w-5xl mx-auto px-4">
+              <div className="flex gap-1 overflow-x-auto py-2 -mb-px">
+                {tabs.map(t => (
+                  <button
+                    key={t.id}
+                    onClick={() => setTab(t.id)}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
+                      tab === t.id
+                        ? `bg-${t.color}-50 text-${t.color}-700 shadow-sm`
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    <span className={`w-6 h-6 rounded-full ${tab === t.id ? iconColors[t.color] : 'bg-gray-300'} text-white text-xs flex items-center justify-center font-bold transition-colors`}>
+                      {t.icon}
+                    </span>
+                    <span className="hidden sm:inline">{t.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </nav>
+
+          {/* Content */}
+          <main className="max-w-5xl mx-auto px-4 py-6">
+            {tab === 'federica' && <PersonCard personKey="federica" data={data} setData={setData} settings={settings} />}
+            {tab === 'simona' && <PersonCard personKey="simona" data={data} setData={setData} settings={settings} />}
+            {tab === 'asmaa' && <PersonCard personKey="asmaa" data={data} setData={setData} settings={settings} />}
+            {tab === 'riepilogo' && <TeamSummary data={data} settings={settings} />}
+            {tab === 'impostazioni' && <SettingsPanel settings={settings} setSettings={setSettings} />}
+          </main>
+
+          {/* Footer */}
+          <footer className="text-center py-6 text-xs text-gray-400 no-print">
+            Compensi Segreteria &middot; Dati salvati automaticamente nel browser
+          </footer>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
