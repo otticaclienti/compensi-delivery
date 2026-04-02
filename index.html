@@ -128,11 +128,10 @@
       rinnovoQuadPerc: 3,
     };
 
-    const DEFAULT_DATA = {
+    const DEFAULT_MONTH_DATA = {
       federica: { appuntamenti: 0, sim: true, rinnovoAnnuale: 0, rinnovoQuad: 0 },
       simona: { appuntamenti: 0, sim: true, rinnovoAnnuale: 0, rinnovoQuad: 0 },
       asmaa: { appuntamenti: 0, sim: true, rinnovoAnnuale: 0, rinnovoQuad: 0 },
-      mese: new Date().toISOString().slice(0, 7),
     };
 
     const PEOPLE = {
@@ -772,12 +771,25 @@
     // ─── Main App ───
     function App() {
       const [tab, setTab] = useState('federica');
-      const [data, setData] = useState(() => {
+      const [mese, setMese] = useState(() => new Date().toISOString().slice(0, 7));
+
+      // All months data: { "2026-04": { federica: {...}, asmaa: {...}, simona: {...} }, ... }
+      const [allData, setAllData] = useState(() => {
         try {
-          const saved = localStorage.getItem('compensi-data');
-          return saved ? { ...DEFAULT_DATA, ...JSON.parse(saved) } : DEFAULT_DATA;
-        } catch { return DEFAULT_DATA; }
+          const saved = localStorage.getItem('compensi-alldata');
+          if (saved) return JSON.parse(saved);
+          // Migrate from old single-month format
+          const oldSaved = localStorage.getItem('compensi-data');
+          if (oldSaved) {
+            const old = JSON.parse(oldSaved);
+            const oldMese = old.mese || new Date().toISOString().slice(0, 7);
+            const { mese: _, ...monthData } = old;
+            return { [oldMese]: { ...DEFAULT_MONTH_DATA, ...monthData } };
+          }
+          return {};
+        } catch { return {}; }
       });
+
       const [settings, setSettings] = useState(() => {
         try {
           const saved = localStorage.getItem('compensi-settings');
@@ -785,9 +797,50 @@
         } catch { return DEFAULT_SETTINGS; }
       });
 
+      // Current month data (with defaults for empty months)
+      const data = useMemo(() => {
+        const monthData = allData[mese] || DEFAULT_MONTH_DATA;
+        return {
+          ...{ mese },
+          federica: { ...DEFAULT_MONTH_DATA.federica, ...monthData.federica },
+          asmaa: { ...DEFAULT_MONTH_DATA.asmaa, ...monthData.asmaa },
+          simona: { ...DEFAULT_MONTH_DATA.simona, ...monthData.simona },
+        };
+      }, [allData, mese]);
+
+      // setData updates allData for the current month
+      const setData = useCallback((updater) => {
+        setAllData(prev => {
+          const currentMonth = prev[mese] || DEFAULT_MONTH_DATA;
+          const fullCurrent = {
+            mese,
+            federica: { ...DEFAULT_MONTH_DATA.federica, ...currentMonth.federica },
+            asmaa: { ...DEFAULT_MONTH_DATA.asmaa, ...currentMonth.asmaa },
+            simona: { ...DEFAULT_MONTH_DATA.simona, ...currentMonth.simona },
+          };
+          const updated = typeof updater === 'function' ? updater(fullCurrent) : updater;
+          const { mese: newMese, ...monthOnly } = updated;
+          if (newMese && newMese !== mese) {
+            setMese(newMese);
+            return prev;
+          }
+          return { ...prev, [mese]: monthOnly };
+        });
+      }, [mese]);
+
+      // Month change handler for MonthPicker
+      const setMeseFromPicker = useCallback((updater) => {
+        if (typeof updater === 'function') {
+          const result = updater(data);
+          if (result.mese !== mese) {
+            setMese(result.mese);
+          }
+        }
+      }, [data, mese]);
+
       useEffect(() => {
-        localStorage.setItem('compensi-data', JSON.stringify(data));
-      }, [data]);
+        localStorage.setItem('compensi-alldata', JSON.stringify(allData));
+      }, [allData]);
 
       useEffect(() => {
         localStorage.setItem('compensi-settings', JSON.stringify(settings));
@@ -822,7 +875,7 @@
                   <h1 className="text-lg font-bold text-gray-900 leading-tight">Compensi Delivery</h1>
                 </div>
               </div>
-              <MonthPicker data={data} setData={setData} />
+              <MonthPicker data={data} setData={setMeseFromPicker} />
             </div>
           </header>
 
