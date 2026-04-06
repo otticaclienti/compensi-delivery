@@ -111,11 +111,10 @@
 
     // ─── Defaults ───
     const DEFAULT_SETTINGS = {
-      fissoFederica: 1000,
+      fissoFederica: 800,
       fissoSimona: 500,
       fissoAsmaa: 500,
       compensoPerApp: 10,
-      teamBonusPercent: 50,
       rimborsoSIM: 10,
       soglie: [
         { min: 50, bonus: 100 },
@@ -135,7 +134,7 @@
     };
 
     const PEOPLE = {
-      federica: { nome: 'Federica', ruolo: 'Direttrice di segreteria', color: 'federica', initials: 'F' },
+      federica: { nome: 'Federica', ruolo: 'Segretaria', color: 'federica', initials: 'F' },
       simona: { nome: 'Simona', ruolo: 'Segretaria', color: 'simona', initials: 'S' },
       asmaa: { nome: 'Asmaa', ruolo: 'Segretaria', color: 'asmaa', initials: 'A' },
     };
@@ -158,7 +157,6 @@
     function calcCompenso(key, data, settings) {
       const person = data[key];
       const app = person.appuntamenti;
-      const isFederica = key === 'federica';
       const fisso = settings[`fisso${key.charAt(0).toUpperCase() + key.slice(1)}`];
       const compensoApp = app * settings.compensoPerApp;
       const { bonus: bonusApp, raggiunte } = calcBonusAppuntamenti(app, settings.soglie);
@@ -168,16 +166,6 @@
         { label: `Appuntamenti (${app} × ${fmt(settings.compensoPerApp)})`, value: compensoApp },
         { label: `Bonus soglie (${app} presentati)`, value: bonusApp },
       ];
-
-      if (isFederica) {
-        // Bonus team
-        const bonusAsmaa = calcBonusAppuntamenti(data.asmaa.appuntamenti, settings.soglie).bonus;
-        const bonusSimona = calcBonusAppuntamenti(data.simona.appuntamenti, settings.soglie).bonus;
-        const teamAsmaa = Math.round(bonusAsmaa * settings.teamBonusPercent / 100);
-        const teamSimona = Math.round(bonusSimona * settings.teamBonusPercent / 100);
-        voci.push({ label: `Bonus team da Asmaa (${settings.teamBonusPercent}% di ${fmt(bonusAsmaa)})`, value: teamAsmaa });
-        voci.push({ label: `Bonus team da Simona (${settings.teamBonusPercent}% di ${fmt(bonusSimona)})`, value: teamSimona });
-      }
 
       if (person.sim) {
         voci.push({ label: 'Rimborso SIM', value: settings.rimborsoSIM });
@@ -544,7 +532,7 @@
           {/* Parametri generali */}
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
             <h3 className="text-lg font-bold text-gray-800 mb-4">Parametri generali</h3>
-            <div className="grid sm:grid-cols-3 gap-4">
+            <div className="grid sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-600 mb-1">€ per appuntamento</label>
                 <input
@@ -553,17 +541,6 @@
                   value={settings.compensoPerApp}
                   onFocus={e => { if (e.target.value === '0') e.target.select(); }}
                   onChange={e => { const v = e.target.value.replace(/[^0-9.]/g, ''); update('compensoPerApp', v === '' ? 0 : parseFloat(v) || 0); }}
-                  className="w-full border-2 border-gray-300 rounded-xl p-3 text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-gray-400"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1">Bonus team (%)</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={settings.teamBonusPercent}
-                  onFocus={e => { if (e.target.value === '0') e.target.select(); }}
-                  onChange={e => { const v = e.target.value.replace(/[^0-9.]/g, ''); update('teamBonusPercent', v === '' ? 0 : Math.min(100, parseFloat(v) || 0)); }}
                   className="w-full border-2 border-gray-300 rounded-xl p-3 text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-gray-400"
                 />
               </div>
